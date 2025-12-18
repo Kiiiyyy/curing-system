@@ -1,1 +1,13 @@
-./config.php
+# Abaikan file konfigurasi database
+config.php
+
+# Abaikan file log sistem
+*.log
+
+# Abaikan folder temp atau cache jika ada
+/temp/
+/cache/
+
+# Abaikan file sistem OS
+.DS_Store
+Thumbs.db
