@@ -12,9 +12,9 @@ if (!$machine_id) {
 }
 
 try {
-    $sql = "SELECT machine_id, tanggal, shift, SUM(durasi) as total_downtime_seconds 
+    $sql = "SELECT machine_id, tanggal, shift, SUM(durasi) as total_runtime_seconds 
             FROM kondisi_mesin 
-            WHERE machine_id = ? AND status_mesin = 'OFF' AND tanggal = ? AND shift = ?
+            WHERE machine_id = ? AND status_mesin = 'ON' AND tanggal = ? AND shift = ?
             GROUP BY machine_id, tanggal, shift";
             
     $stmt = $pdo->prepare($sql);
@@ -27,7 +27,7 @@ try {
             'machine_id' => $machine_id,
             'tanggal' => $tanggal,
             'shift' => $shift,
-            'total_downtime' => $result ? (int)$result['total_downtime_seconds'] : 0,
+            'total_runtime' => $result ? (int)$result['total_runtime_seconds'] : 0,
             'unit' => 'seconds'
         ]
     ]);
