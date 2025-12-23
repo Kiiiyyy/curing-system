@@ -1,161 +1,293 @@
-# 🚀 Industrial Machine Condition Monitoring API
+# 🚀 Industrial Curing Monitoring System — API Documentation
 
-Backend logging sederhana berbasis **Native PHP** untuk memonitor kondisi mesin industri dengan pendekatan **1 Context – 4 Metrics**. Sistem ini dirancang ringan, mudah diintegrasikan dengan perangkat IoT, Excel, maupun sistem SCADA sederhana.
+**Version:** 3.0 *(Industry Ready)*
 
----
+**Base URL:**
 
-## 📋 Ringkasan Sistem
-
-Sistem melakukan pencatatan kondisi mesin secara periodik ke **satu tabel log tunggal**. Dari tabel ini, sistem menghasilkan **4 metrik operasional utama** menggunakan query SQL tanpa tabel tambahan.
-
-### 📊 Konsep 1 Konteks – 4 Metrik
-
-**Konteks:** Log Kondisi Mesin
-
-**Metrik yang dihasilkan:**
-
-1. **Status Mesin** → Kondisi hidup/mati mesin terbaru.
-2. **Mode Mesin** → Mode operasi mesin terbaru.
-3. **Runtime** → Total waktu mesin dalam kondisi ON selama 8 jam terakhir.
-4. **Downtime** → Total waktu mesin dalam kondisi OFF selama 8 jam terakhir.
-
-Pendekatan ini memastikan sistem **sederhana, konsisten, dan scalable** tanpa kompleksitas berlebih.
-
----
-
-## 🛠 Konfigurasi API
-
-* **Base URL:** `http://localhost/monitoring_api`
-* **Format Response:** `JSON`
-* **Metode HTTP:** `GET`
-
-> ⚠️ Penggunaan metode GET dipilih untuk kemudahan integrasi dengan perangkat IoT, browser, dan Excel.
-
----
-
-## 📡 Endpoint API
-
-### 1️⃣ Insert Kondisi Mesin
-
-Mencatat kondisi terbaru mesin ke dalam sistem.
-
-* **Endpoint:** `/api/insert.php`
-* **Method:** `GET`
-
-**Parameter:**
-
-| Nama           | Tipe     | Wajib | Keterangan                                           |
-| -------------- | -------- | ----- | ---------------------------------------------------- |
-| `status_mesin` | String   | Ya    | `ON` atau `OFF`                                      |
-| `mode_mesin`   | String   | Ya    | `AUTO` atau `MANUAL`                                 |
-| `waktu`        | Datetime | Tidak | Format `YYYY-MM-DD HH:MM:SS` (default: waktu server) |
-
-**Contoh Request:**
-
-```http
-GET /api/insert.php?status_mesin=ON&mode_mesin=AUTO
+```
+http://localhost/curing-system/
 ```
 
+**Standard:**
+Native **PHP REST API** *(GET-based untuk kompatibilitas PLC / Script industri)*
+
+Sistem ini dirancang untuk memantau kondisi **mesin curing pada manufaktur ban** dengan pendekatan:
+
+* **Event-Based Logging**
+* **Automatic Duration Calculation**
+* **Shift-Based Production Tracking**
+* **Quality (OEE) Measurement via Fault Mode**
+
 ---
 
-### 2️⃣ Monitoring Status & Mode Terakhir
+## 1️⃣ Kondisi Mesin (Write & Auto-Log)
 
-Mengambil kondisi mesin paling terakhir yang tercatat.
+Endpoint utama untuk **mengubah status mesin**.
+Jika status berubah (**ON ⇄ OFF**), sistem otomatis **menutup durasi status sebelumnya**.
 
-* **Endpoint:** `/api/latest.php`
-* **Method:** `GET`
+### Endpoint
 
-**Contoh Response:**
+```
+GET api/kondisi-mesin-write.php
+```
+
+### Parameters
+
+| Parameter   | Tipe   | Wajib | Deskripsi                               |
+| ----------- | ------ | ----- | --------------------------------------- |
+| machine_id  | String | Ya    | ID unik mesin (contoh: `MC-01`)         |
+| perintah    | Enum   | Ya    | Status target: `ON` / `OFF`             |
+| mode_target | Enum   | Ya    | Mode mesin: `AUTO`, `MANUAL`, `FAULT`   |
+| shift       | Enum   | Ya    | `SHIFT_1`, `SHIFT_2`, `SHIFT_3`         |
+| tanggal     | Date   | Tidak | Format `YYYY-MM-DD` (default: hari ini) |
+
+### Request Example
+
+```
+/api/kondisi-mesin-write.php?machine_id=MC-01&perintah=OFF&mode_target=FAULT&shift=SHIFT_1
+```
+
+### Response Success
 
 ```json
 {
-  "metrik": "Status & Mode Terakhir",
-  "status_mesin": "ON",
-  "mode_mesin": "AUTO",
-  "last_update": "2025-12-18 09:15:00"
+  "status": "success",
+  "message": "Log diperbarui",
+  "update_duration": "Status berubah, durasi diupdate: 450 detik"
 }
 ```
 
 ---
 
-### 3️⃣ Monitoring Runtime (8 Jam Terakhir)
+## 2️⃣ Produksi Curing (Hybrid: Write & Read)
 
-Menghitung total durasi mesin dalam kondisi **ON** selama 8 jam terakhir.
+Endpoint ganda untuk **mencatat produksi** atau **membaca riwayat produksi**.
 
-* **Endpoint:** `/api/operasi.php`
-* **Method:** `GET`
+### Endpoint
 
-**Contoh Response:**
+```
+GET api/produksi-curing.php
+```
+
+### Logic
+
+* `jumlah_ban` **diisi** → **Write (Insert produksi)**
+* `jumlah_ban` **kosong** → **Read (History produksi)**
+
+---
+
+### A. Post Production (Write)
+
+#### Request Example
+
+```
+/api/produksi-curing.php?machine_id=MC-01&shift=SHIFT_1&jumlah_ban=25
+```
+
+#### Response Success
 
 ```json
 {
-  "metrik": "Total Runtime (8 Jam Terakhir)",
-  "total_point_logs": 480,
-  "unit": "Log Points",
-  "keterangan": "Setiap 1 log mewakili 1 menit jika interval pengiriman stabil."
+  "status": "success",
+  "message": "Data produksi berhasil dicatat",
+  "details": {
+    "machine": "MC-01",
+    "added_count": "25"
+  }
 }
 ```
 
 ---
 
-### 4️⃣ Monitoring Downtime (8 Jam Terakhir)
+### B. Get Production History (Read)
 
-Menghitung total durasi mesin dalam kondisi **OFF** selama 8 jam terakhir.
+#### Request Example
 
-* **Endpoint:** `/api/downtime.php`
-* **Method:** `GET`
+```
+/api/produksi-curing.php?machine_id=MC-01&shift=SHIFT_1
+```
 
-**Contoh Response:**
+#### Response Success
 
 ```json
 {
-  "metrik": "Total Downtime (8 Jam Terakhir)",
-  "total_point_logs": 25,
-  "unit": "Log Points"
+  "status": "success",
+  "total_akumulasi": 150,
+  "data_list": [
+    {
+      "id": 1,
+      "machine_id": "MC-01",
+      "jumlah_ban": 25,
+      "waktu": "2025-12-23 09:00:00"
+    }
+  ]
 }
 ```
 
 ---
 
-## 🗄️ Skema Database
+## 3️⃣ Monitoring Aggregator (Dashboard Data)
 
-Sistem hanya menggunakan **satu tabel utama** untuk menjaga kesederhanaan dan integritas data.
+Endpoint terpadu untuk **Dashboard (Vue / React / Mobile App)**.
 
-### Tabel: `kondisi_mesin`
+### Endpoint
 
-| Kolom          | Tipe Data   | Deskripsi                      |
-| -------------- | ----------- | ------------------------------ |
-| `id`           | BIGINT (PK) | Auto Increment ID              |
-| `status_mesin` | VARCHAR(10) | Status mesin (`ON` / `OFF`)    |
-| `mode_mesin`   | VARCHAR(10) | Mode mesin (`AUTO` / `MANUAL`) |
-| `waktu`        | DATETIME    | Timestamp pencatatan           |
+```
+GET api/monitoring.php
+```
 
----
+### View Types
 
-## ⚙️ Cara Instalasi
-
-1. Clone atau salin folder project ke direktori `htdocs` (XAMPP).
-2. Buat database MySQL dengan nama `db_monitoring`.
-3. Jalankan query SQL pembuatan tabel `kondisi_mesin`.
-4. Sesuaikan konfigurasi database pada file `config.php`.
-5. Jalankan server Apache & MySQL.
-6. Akses endpoint API melalui browser atau tools seperti Postman.
+| View           | Fungsi                                                     |
+| -------------- | ---------------------------------------------------------- |
+| `overview`     | Detail satu mesin (Runtime, Downtime, Production, Quality) |
+| `shift-report` | Tabel performa semua mesin dalam satu shift                |
+| `latest`       | 10 log kejadian terbaru                                    |
 
 ---
 
-## 📌 Catatan Teknis
+### Request Example (Overview)
 
-* Sistem ini **event-log based**, bukan time-series database.
-* Akurasi runtime/downtime bergantung pada **konsistensi interval pengiriman data**.
-* Cocok untuk:
+```
+/api/monitoring.php?view=overview&machine_id=MC-01&shift=SHIFT_1
+```
 
-  * Proyek IoT
-  * Monitoring mesin industri sederhana
-  * Integrasi PLC → Web
-  * Logging Excel via Power Query
+### Response Success
+
+```json
+{
+  "status": "success",
+  "data": {
+    "runtime": 12400,
+    "downtime": 1200,
+    "production": 350,
+    "quality": 80
+  }
+}
+```
 
 ---
 
-## ✅ Kesimpulan
+## 4️⃣ Total Produksi Global (Plant Wide)
 
-Industrial Machine Condition Monitoring API adalah solusi backend minimalis namun kuat untuk pemantauan mesin berbasis log tunggal. Dengan pendekatan **1 Context – 4 Metrics**, sistem ini mudah dipahami, dikembangkan, dan dipresentasikan untuk kebutuhan akademik maupun implementasi industri skala kecil.
+Menghitung **akumulasi produksi dari seluruh mesin** di lantai pabrik.
+
+### Endpoint
+
+```
+GET api/total-produksi.php
+```
+
+### Request Example
+
+```
+/api/total-produksi.php?shift=SHIFT_1&tanggal=2025-12-23
+```
+
+### Response Success
+
+```json
+{
+  "status": "success",
+  "data": {
+    "total_produksi": 1250,
+    "jumlah_mesin_aktif": 12,
+    "unit": "pcs"
+  }
+}
+```
+
+---
+
+## 5️⃣ Mode Fault (Quality OEE)
+
+Mengambil **metrik kualitas (Quality OEE)** berdasarkan **frekuensi gangguan (FAULT)**
+Data diambil dari **Database View** (tanpa insert langsung).
+
+### Endpoint
+
+```
+GET api/mode-fault.php
+```
+
+### Request Example
+
+```
+/api/mode-fault.php?machine_id=MC-01&shift=SHIFT_1
+```
+
+### Response Success
+
+```json
+{
+  "status": "success",
+  "data": {
+    "machine_id": "MC-01",
+    "total_fault": 2,
+    "quality_percentage": 80
+  }
+}
+```
+
+---
+
+## 6️⃣ Log Kondisi Mesin (History)
+
+Membaca **Event Log** kondisi mesin secara kronologis.
+
+### Endpoint
+
+```
+GET api/kondisi-mesin.php
+```
+
+### Parameters
+
+| Parameter  | Wajib | Deskripsi                 |
+| ---------- | ----- | ------------------------- |
+| machine_id | Tidak | Filter mesin tertentu     |
+| limit      | Tidak | Jumlah data (default: 10) |
+
+---
+
+### Response Success
+
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 45,
+      "machine_id": "MC-01",
+      "status_mesin": "OFF",
+      "mode_mesin": "FAULT",
+      "durasi": 0,
+      "waktu": "2025-12-23 10:15:00"
+    }
+  ]
+}
+```
+
+---
+
+## 🔴 Error Handling
+
+Semua error menggunakan format JSON standar:
+
+```json
+{
+  "status": "error",
+  "message": "Machine ID wajib diisi"
+}
+```
+
+---
+
+## 📌 Catatan Integrasi
+
+* Cocok untuk **PLC / IoT / Script Industri**
+* Tidak menggunakan POST → **Aman untuk device terbatas**
+* Siap diintegrasikan ke **Dashboard Web / Mobile**
+* Mendukung **OEE Calculation (Runtime, Downtime, Quality)**
+
+---
