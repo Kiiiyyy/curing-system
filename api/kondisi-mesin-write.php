@@ -54,7 +54,6 @@ try {
         'message' => 'Log diperbarui',
         'update_duration' => ($durasi_kalkulasi > 0 ? "Status berubah, durasi diupdate: $durasi_kalkulasi detik" : "Status tetap, durasi tidak diupdate")
     ]);
-
 } catch (Exception $e) {
     $pdo->rollBack();
     echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
